@@ -42,9 +42,9 @@ The generated artifacts are committed in the product repositories so each
 product stays independently deployable. Both repositories have a guard test
 that regenerates the artifacts and compares them byte-for-byte.
 
-## Note on the submodule URL
+## Repository
 
-The submodule was wired up from a local clone (`D:/zenviz-core`) because no
-remote URL was supplied. Before sharing either product repository, replace the
-`url` in its `.gitmodules` with the real remote and run
-`git submodule sync --recursive`.
+Hosted at https://github.com/Xingye-Dujing/zenviz-core (public), and referenced
+as a submodule at `third_party/zenviz-core` by both product repositories.
+Pushing a commit here and advancing the submodule pointer in a product is the
+way shared chart-studio changes reach both products.
