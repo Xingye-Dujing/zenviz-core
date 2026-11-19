@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+{{HEAD_SCRIPTS}}
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>可视化图表</title>
+    <link rel="icon" href="{{FAVICON}}" type="image/x-icon" />
+    {{VENDOR_SCRIPTS}}
+    {{STYLES}}
+  </head>
+  <body class="body-grid">
+    <div id="splash" aria-label="ZENVIZ启动页">
+      <div class="splash-logo">ZENVIZ</div>
+      <div class="splash-tagline">图表可视化 研究 · 人文 · 艺术</div>
+      <button class="splash-enter" id="splash-enter">启动</button>
+    </div>
+    <div id="menu-trigger"></div>
+    <nav id="top-menu" aria-label="ZENVIZ菜单">
+      <div class="menu-group">
+        <span class="menu-label">引擎</span
+        ><button class="menu-btn" data-menu="engine">引擎</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">数据</span><button class="menu-btn" data-menu="data">数据</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">样式</span><button class="menu-btn" data-menu="style">样式</button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label">导出</span
+        ><button class="menu-btn" data-menu="export">导出</button>
+      </div>
+      <button class="pin-btn" id="pin-btn" type="button" title="固定菜单" aria-pressed="false">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </nav>
+    <div id="dropdowns"></div>
+
+    <main id="workspace">
+      <header class="zen-head">
+        <div class="brand">
+          <h1>ZENVIZ</h1>
+          <p>图表可视化 研究 · 人文 · 艺术</p>
+        </div>
+        <div class="head-meta">
+          <span>行数 <b id="meta-rows">12</b></span
+          ><span>系列 <b id="meta-series">3</b></span
+          ><span>引擎 <b id="meta-engine">ECharts</b></span>
+        </div>
+      </header>
+
+      <aside class="panel library">
+        <div class="panel-head">
+          <span class="panel-title">图表库</span><span class="panel-note">按引擎筛选</span>
+        </div>
+        <div class="panel-body">
+          <section class="section">
+            <div class="section-title">分类</div>
+            <div class="lib-grid" id="category-list"></div>
+          </section>
+          <section class="section">
+            <div class="section-title">图表类型</div>
+            <div class="lib-grid" id="type-list"></div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="panel stage-panel">
+        <div class="panel-head">
+          <span class="panel-title">画布</span>
+          <div class="canvas-head-right">
+            <div class="stage-title"><strong id="stage-title">研究结果</strong></div>
+            <div class="stage-actions">
+              <button class="ghost-btn" id="edit-data-btn">编辑数据</button
+              ><button class="ghost-btn" id="fullscreen-btn">全屏</button>
+            </div>
+          </div>
+        </div>
+        <div class="stage-wrap" id="stage-wrap">
+          <div id="chart-stage">
+            <div id="chart-frame">
+              <div id="chart-mount"></div>
+              <svg id="zen-svg" viewBox="0 0 1000 620" preserveAspectRatio="none"></svg>
+              <div id="chart-overlay"></div>
+              <div id="empty-state">
+                <div class="empty-inner">
+                  <h2>ZENVIZ</h2>
+                  <p>从左侧选择图表。<br />可以导入 CSV、TXT、XLSX，也可以直接编辑数据。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel inspector">
+        <div class="panel-head">
+          <span class="panel-title">属性</span>
+          <div class="canvas-head-right">
+            <span class="panel-note">细节调整</span>
+            <button class="ghost-btn" id="reset-inspector-btn" type="button">重置</button>
+          </div>
+        </div>
+        <div class="panel-body" id="inspector-body"></div>
+      </aside>
+    </main>
+
+    <div class="databar">
+      <div class="data-left">
+        <span class="status-dot" id="status-dot"></span
+        ><span class="status-text" id="status-text">数据已就绪</span
+        ><span class="engine-chip" id="engine-status">ECharts · 6.1</span>
+      </div>
+      <div class="data-right">
+        <button class="data-btn" id="import-btn">导入</button
+        ><button class="data-btn" id="save-png-btn">PNG</button
+        ><button class="data-btn" id="save-svg-btn">SVG</button
+        ><button class="data-btn" id="save-pdf-btn">PDF</button
+        ><button class="data-btn" id="save-tex-btn">TeX</button
+        ><button class="data-btn" id="reset-btn">重置</button>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <input type="file" id="file-input" accept=".csv,.txt,.xlsx,.xls,.tsv" />
+    <input type="file" id="property-import-input" accept=".json,application/json" />
+
+    <div class="modal preview-modal" id="preview-modal" aria-label="图表放大查看">
+      <div class="preview-card">
+        <div class="modal-head">
+          <h3>图表放大查看</h3>
+          <button class="modal-close" id="preview-close" type="button">×</button>
+        </div>
+        <div class="preview-body" id="preview-body"></div>
+      </div>
+    </div>
+    <div class="modal" id="shortcuts-modal" aria-label="快捷键说明">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>快捷键</h3>
+          <button class="modal-close" id="shortcuts-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="hk-grid" id="shortcuts-body"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal" id="data-modal">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>数据表</h3>
+          <button class="modal-close" id="data-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-grid">
+            <div class="field modal-wide">
+              <label>文本数据</label
+              ><textarea
+                id="paste-data"
+                class="modal-wide"
+                rows="7"
+                placeholder="粘贴带表头的数据，逗号、制表符、分号或空格均可识别"
+              ></textarea>
+            </div>
+            <div id="data-role-fields" class="data-role-fields"></div>
+            <div id="data-role-note" class="data-role-note" aria-live="polite"></div>
+          </div>
+          <div class="modal-gap"></div>
+          <div id="table-wrap"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="ghost-btn" id="parse-paste">解析粘贴数据</button
+          ><button class="ghost-btn" id="data-add-row">+ 行</button
+          ><button class="ghost-btn" id="data-add-col">+ 列</button>
+        </div>
+      </div>
+    </div>
+
+    {{PARSE_SCRIPT}}
+    {{SCRIPT}}
+{{BRIDGE_SCRIPT}}
+  </body>
+</html>
