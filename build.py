@@ -18,7 +18,7 @@ import sys
 CORE = pathlib.Path(__file__).resolve().parent
 SHELL = (
     "{{HEAD_SCRIPTS}}|{{VENDOR_SCRIPTS}}|{{FAVICON}}|{{STYLES}}|"
-    "{{PARSE_SCRIPT}}|{{SCRIPT}}|{{BRIDGE_SCRIPT}}"
+    "{{PARSE_SCRIPT}}|{{SCRIPT}}|{{BRIDGE_SCRIPT}}|{{DATA_EXTRA_BTNS}}"
 )
 
 
@@ -58,7 +58,8 @@ def inject_tail(js: str, tail: str) -> str:
 
 
 def fill_shell(
-    cfg: dict, head: str, vendor: str, styles: str, parse: str, script: str, bridge: str
+    cfg: dict, head: str, vendor: str, styles: str, parse: str, script: str,
+    bridge: str, extra_btns: str = "",
 ) -> str:
     shell = read(CORE / "core/shell.html")
     for key, value in {
@@ -69,12 +70,14 @@ def fill_shell(
         "{{PARSE_SCRIPT}}": parse,
         "{{SCRIPT}}": script,
         "{{BRIDGE_SCRIPT}}": bridge.rstrip("\n"),
+        "{{DATA_EXTRA_BTNS}}": extra_btns,
     }.items():
         if key not in shell:
             raise SystemExit(f"[build] placeholder missing from shell: {key}")
         shell = shell.replace(key, value)
     for token in ("{{HEAD_SCRIPTS}}", "{{VENDOR_SCRIPTS}}", "{{FAVICON}}",
-                  "{{STYLES}}", "{{PARSE_SCRIPT}}", "{{SCRIPT}}", "{{BRIDGE_SCRIPT}}"):
+                  "{{STYLES}}", "{{PARSE_SCRIPT}}", "{{SCRIPT}}", "{{BRIDGE_SCRIPT}}",
+                  "{{DATA_EXTRA_BTNS}}"):
         if token in shell:
             raise SystemExit(f"[build] unresolved placeholder: {token}")
     return shell
@@ -85,6 +88,10 @@ def build(product: str, root: pathlib.Path) -> None:
     css = read(CORE / "core/zenviz.css").strip("\n")
     parse_js = read(CORE / "core/zenviz-parse.js").strip("\n")
     page_js = read(CORE / "core/zenviz.js").strip("\n")
+    extra_path = CORE / "profiles" / product / "data_extra.html"
+    extra_btns = (
+        read(extra_path).strip("\n") if extra_path.is_file() else ""
+    )
 
     print(f"[build] product={product} layout={cfg['layout']} root={root}")
 
@@ -99,6 +106,7 @@ def build(product: str, root: pathlib.Path) -> None:
             "<script>\n" + parse_js + "\n    </script>",
             "<script>\n" + inject_tail(page_js, tail) + "\n    </script>",
             bridge,
+            extra_btns,
         )
         write(root / "public/omm-visualization.html", html)
         return
@@ -117,6 +125,7 @@ def build(product: str, root: pathlib.Path) -> None:
             '<script src="js/zenviz-parse.js"></script>',
             '<script src="js/zenviz-page.js"></script>',
             bridge,
+            extra_btns,
         )
         write(static / "zenviz.html", html)
         return

@@ -19,3 +19,29 @@
             }
           })
         }
+
+        /* 送复盘：把当前图表登记为一条复盘动态，交给 Hub 的 live 快照聚合后
+         * 由 ZenReview 拉取。只写自己的 localStorage 键，不碰别的产品。 */
+        function exportReview() {
+          try {
+            const KEY = 'zen.viz.review.v1'
+            const rows = Array.isArray(state.data) ? state.data : []
+            const entry = {
+              app: 'visualization',
+              ts: new Date().toISOString(),
+              title: String(state.title || '未命名图表'),
+              chartType: String(state.type || 'chart'),
+              rows: rows.length,
+              cols: rows.length && rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0]).length : 0,
+            }
+            let list = []
+            try { list = JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { list = [] }
+            if (!Array.isArray(list)) list = []
+            list.push(entry)
+            localStorage.setItem(KEY, JSON.stringify(list.slice(-50)))
+            setStatus('已送复盘 · ' + entry.title)
+          } catch (e) {
+            reportError('送复盘失败', e, true)
+          }
+        }
+        $('#save-review-btn').onclick = exportReview
