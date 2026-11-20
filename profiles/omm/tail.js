@@ -25,14 +25,16 @@
         function exportReview() {
           try {
             const KEY = 'zen.viz.review.v1'
-            const rows = Array.isArray(state.data) ? state.data : []
+            /* state.data is { headers: [...], rows: [...] }, not a bare array. */
+            const data = state.data || {}
+            const rows = Array.isArray(data.rows) ? data.rows : []
             const entry = {
               app: 'visualization',
               ts: new Date().toISOString(),
               title: String(state.title || '未命名图表'),
               chartType: String(state.type || 'chart'),
               rows: rows.length,
-              cols: rows.length && rows[0] && typeof rows[0] === 'object' ? Object.keys(rows[0]).length : 0,
+              cols: Array.isArray(data.headers) ? data.headers.length : 0,
             }
             let list = []
             try { list = JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { list = [] }

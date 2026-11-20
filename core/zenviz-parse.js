@@ -14,10 +14,29 @@
     'use strict';
 
     function delimiterOf(headerLine) {
-        if (headerLine.includes('\t')) return '\t';
-        if (headerLine.includes(',')) return ',';
-        if (headerLine.includes(';')) return ';';
-        if (/\s{2,}/.test(headerLine)) return 'whitespace';
+        /* Delimiters inside quoted fields are data, not separators. Compare only
+           the characters outside quotes, or `"a,b";"c,d"` is read as comma
+           separated and every column shifts. Keep the original tab > comma >
+           semicolon priority. */
+        var outside = '';
+        var quoted = false;
+        var line = String(headerLine || '');
+        for (var i = 0; i < line.length; i += 1) {
+            var ch = line.charAt(i);
+            if (quoted) {
+                if (ch === '"') {
+                    if (line.charAt(i + 1) === '"') { i += 1; }
+                    else { quoted = false; }
+                }
+                continue;
+            }
+            if (ch === '"') { quoted = true; continue; }
+            outside += ch;
+        }
+        if (outside.includes('\t')) return '\t';
+        if (outside.includes(',')) return ',';
+        if (outside.includes(';')) return ';';
+        if (/\s{2,}/.test(outside)) return 'whitespace';
         return ' ';
     }
 
