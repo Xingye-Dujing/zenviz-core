@@ -2,7 +2,7 @@
   "replacements": [
     {
       "old": "    <script src=\"omm-embed.js\"></script>\n    <script src=\"omm-desktop.js\"></script>\n    <script src=\"omm-share.js\"></script>\n",
-      "new": "    <script src=\"omm-embed.js\"></script>\n    <script src=\"zen/components/layer.js\"></script>\n    <script src=\"zen/components/toast.js\"></script>\n    <script src=\"zen/components/dialog.js\"></script>\n    <script src=\"zen/components/select.js\"></script>\n    <script src=\"zen/components/menu.js\"></script>\n    <script src=\"zen/components/shortcuts.js\"></script>\n    <script src=\"zen/components/index.js\"></script>\n<script src=\"omm-desktop.js\"></script>\n    <script src=\"omm-share.js\"></script>\n",
+      "new": "    <script src=\"omm-embed.js\"></script>\n    <script src=\"zen/components/layer.js\"></script>\n    <script src=\"zen/components/popover.js\"></script>\n    <script src=\"zen/components/toast.js\"></script>\n    <script src=\"zen/components/dialog.js\"></script>\n    <script src=\"zen/components/select.js\"></script>\n    <script src=\"zen/components/menu.js\"></script>\n    <script src=\"zen/components/shortcuts.js\"></script>\n    <script src=\"zen/components/index.js\"></script>\n<script src=\"omm-desktop.js\"></script>\n    <script src=\"omm-share.js\"></script>\n",
       "anchor": 1
     },
     {
@@ -53,6 +53,21 @@
     {
       "old": "          renderInspector()\n          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()\n          renderEngines()\n",
       "new": "          renderInspector()\n          if ($('#data-modal')) syncDataColumnSelects()\n          renderEngines()\n",
+      "anchor": 1
+    },
+    {
+      "old": "          const el = document.createElement('div')\n          el.className = 'dropdown open'\n          el.id = 'dd-' + menu\n",
+      "new": "          const el = document.createElement('div')\n          el.className = 'dropdown'\n          el.id = 'dd-' + menu\n",
+      "anchor": 1
+    },
+    {
+      "old": "          document.body.appendChild(el)\n          const r = btn.getBoundingClientRect()\n          el.style.left = Math.min(r.left, innerWidth - el.offsetWidth - 8) + 'px'\n          el.style.top = r.bottom + 3 + 'px'\n          setTimeout(() => {\n            document.body.classList.add('submenu-open')\n          }, 0)\n          el.addEventListener('click', (e) => {\n",
+      "new": "          document.body.appendChild(el)\n          window.ZenUI.popover.open(el, btn, {\n            gap: 3, pad: 8,\n            onOpen: () => {\n              setTimeout(() => {\n                document.body.classList.add('submenu-open')\n              }, 0)\n            },\n            onClose: () => {\n              document.body.classList.remove('submenu-open')\n              $('.menu-btn.active')?.classList.remove('active')\n              el.remove()\n            },\n          })\n          el.addEventListener('click', (e) => {\n",
+      "anchor": 1
+    },
+    {
+      "old": "        function closeDropdowns() {\n          $$('.dropdown').forEach((e) => e.remove())\n          $('.menu-btn.active')?.classList.remove('active')\n          document.body.classList.remove('submenu-open')\n        }\n",
+      "new": "        function closeDropdowns() {\n          window.ZenUI.popover.close()\n        }\n",
       "anchor": 1
     },
     {
