@@ -47,6 +47,31 @@ def load_profile(product: str) -> tuple[dict, str, str, str, str]:
     )
 
 
+def load_transforms(product: str) -> list:
+    """OMM-only post-build transforms (shared-UI migration, legacy removal).
+
+    Stored per profile so the split-layout product (CaiXiHui) keeps its original
+    output untouched. Each entry is an anchored {old,new} string replacement;
+    they are applied in reverse order so earlier anchors are not disturbed.
+    """
+    path = CORE / "profiles" / product / "transforms.json"
+    if not path.is_file():
+        return []
+    return json.loads(read(path)).get("replacements", [])
+
+
+def apply_transforms(text: str, replacements: list) -> str:
+    for item in reversed(replacements):
+        old, new = item["old"], item["new"]
+        if text.count(old) != 1:
+            raise SystemExit(
+                f"[build] transform anchor not unique (count={text.count(old)}): "
+                f"{old[:90]!r}"
+            )
+        text = text.replace(old, new, 1)
+    return text
+
+
 def inject_tail(js: str, tail: str) -> str:
     """Put the product receiver inside the page IIFE, just before init()."""
     if not tail.strip():
@@ -108,6 +133,7 @@ def build(product: str, root: pathlib.Path) -> None:
             bridge,
             extra_btns,
         )
+        html = apply_transforms(html, load_transforms(product))
         write(root / "public/omm-visualization.html", html)
         return
 
