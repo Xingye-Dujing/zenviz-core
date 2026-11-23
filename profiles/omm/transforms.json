@@ -204,6 +204,21 @@
       "old": "      })()\n    \n    </script>\n",
       "new": "      })()\n\n    </script>\n",
       "anchor": 1
+    },
+    {
+      "old": "        function downloadJsonFile(filename, payload) {\n          const blob = new Blob([JSON.stringify(payload, null, 2)], {\n            type: 'application/json;charset=utf-8',\n          })\n          const url = URL.createObjectURL(blob)\n          const a = document.createElement('a')\n          a.href = url\n          a.download = filename\n          document.body.appendChild(a)\n          a.click()\n          a.remove()\n          setTimeout(() => URL.revokeObjectURL(url), 0)\n        }",
+      "new": "        function downloadJsonFile(filename, payload) {\n          return ZenUtil.saveJSON(filename, payload)\n        }",
+      "anchor": 1
+    },
+    {
+      "old": "        async function exportTeX() {\n          try {\n            const tex = buildTeX()\n            const blob = new Blob([tex], { type: 'text/x-tex;charset=utf-8' })\n            const a = document.createElement('a')\n            a.download = safeName(state.title) + '.tex'\n            a.href = URL.createObjectURL(blob)\n            a.click()\n            setTimeout(() => URL.revokeObjectURL(a.href), 1000)\n            setStatus('TeX 已导出 · 请用 XeLaTeX 编译生成矢量图')\n          } catch (e) {\n            reportError('TeX 导出失败', e, true)\n          }\n        }",
+      "new": "        async function exportTeX() {\n          try {\n            ZenUtil.download(safeName(state.title) + '.tex', buildTeX(), 'text/x-tex;charset=utf-8')\n            setStatus('TeX 已导出 · 请用 XeLaTeX 编译生成矢量图')\n          } catch (e) {\n            reportError('TeX 导出失败', e, true)\n          }\n        }",
+      "anchor": 1
+    },
+    {
+      "old": "            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })\n            const a = document.createElement('a')\n            a.download = safeName(state.title) + '.svg'\n            a.href = URL.createObjectURL(blob)\n            a.click()\n            setTimeout(() => URL.revokeObjectURL(a.href), 1000)\n",
+      "new": "            ZenUtil.download(safeName(state.title) + '.svg', svgString, 'image/svg+xml;charset=utf-8')\n",
+      "anchor": 1
     }
   ]
 }
