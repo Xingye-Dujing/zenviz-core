@@ -1,6 +1,31 @@
 {
   "replacements": [
     {
+      "old": "    <script src=\"zen/components/layer.js\"></script>\n",
+      "new": "    <script src=\"zen/foundation/util.js\"></script>\n    <script src=\"zen/components/layer.js\"></script>\n",
+      "anchor": 1
+    },
+    {
+      "old": "        let toastTimer = 0\n        function toast(msg) { return window.ZenUI.toast(msg) }\n",
+      "new": "        function toast(msg) { return window.ZenUI.toast(msg) }\n",
+      "anchor": 1
+    },
+    {
+      "old": "        function escapeHtml(s) {\n          return String(s).replace(\n            /[&<>\"']/g,\n            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#039;' })[m],\n          )\n        }\n",
+      "new": "        function escapeHtml(s) { return ZenUtil.esc(s) }\n",
+      "anchor": 1
+    },
+    {
+      "old": "        function esc(s) {\n          return String(s == null ? '' : s).replace(\n            /[&<>\"']/g,\n            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#039;' })[m],\n          )\n        }\n",
+      "new": "        function esc(s) { return ZenUtil.esc(s) }\n",
+      "anchor": 1
+    },
+    {
+      "old": "        function safeName(s) {\n          return String(s || 'zenviz')\n            .replace(/[\\\\/:*?\"<>|]/g, '_')\n            .slice(0, 60)\n        }\n",
+      "new": "        function safeName(s) { return ZenUtil.safeName(s || 'zenviz', { max: 60, fallback: 'zenviz' }) }\n",
+      "anchor": 1
+    },
+    {
       "old": "    <script src=\"omm-embed.js\"></script>\n    <script src=\"omm-desktop.js\"></script>\n    <script src=\"omm-share.js\"></script>\n",
       "new": "    <script src=\"omm-embed.js\"></script>\n    <script src=\"zen/components/layer.js\"></script>\n    <script src=\"zen/components/popover.js\"></script>\n    <script src=\"zen/components/toast.js\"></script>\n    <script src=\"zen/components/dialog.js\"></script>\n    <script src=\"zen/components/select.js\"></script>\n    <script src=\"zen/components/menu.js\"></script>\n    <script src=\"zen/components/shortcuts.js\"></script>\n    <script src=\"zen/components/index.js\"></script>\n<script src=\"omm-desktop.js\"></script>\n    <script src=\"omm-share.js\"></script>\n",
       "anchor": 1
