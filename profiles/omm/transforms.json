@@ -101,8 +101,13 @@
       "anchor": 1
     },
     {
+      "old": "        function hkRow(desc, keys) {\n          return `<div class=\"hk-row\"><span>${esc(desc)}</span><span class=\"hk-key\">${esc(keys)}</span></div>`\n        }\n        function hkSection(title, rows) {\n          return `<div class=\"hk-section\"><div class=\"hk-section-title\">${esc(title)}</div>${rows.join('')}</div>`\n        }\n        function hkNote(html) {\n          return `<div class=\"hk-section\"><div class=\"hk-note\">${html}</div></div>`\n        }\n",
+      "new": "        function hkRow(desc, keys) {\n          return window.ZenUI.shortcuts.row(desc, keys)\n        }\n        function hkSection(title, rows) {\n          return window.ZenUI.shortcuts.section(title, rows)\n        }\n        function hkNote(html) {\n          return window.ZenUI.shortcuts.note(html)\n        }\n",
+      "anchor": 1
+    },
+    {
       "old": "          ]\n          const grid = $('#shortcuts-body')\n          if (grid) grid.innerHTML = rows.join('')\n          const modal = $('#shortcuts-modal')\n          if (modal) modal.classList.add('open')\n        }\n",
-      "new": "          ]\n          window.ZenUI.modal.open({\n            title: '快捷键',\n            html: '<div class=\"hk-grid\" id=\"shortcuts-body\">' + rows.join('') + '</div>',\n            ids: { close: 'shortcuts-close' },\n          })\n        }\n",
+      "new": "          ]\n          window.ZenUI.shortcuts.help({\n            title: '快捷键',\n            body: window.ZenUI.shortcuts.grid(rows),\n            bodyId: 'shortcuts-body',\n          })\n        }\n",
       "anchor": 1
     },
     {
