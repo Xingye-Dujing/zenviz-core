@@ -6983,6 +6983,19 @@
           }
         }
 
+        function sanitizePersistedData(source) {
+          if (!source || typeof source !== 'object' || !Array.isArray(source.headers) || !Array.isArray(source.rows)) return null
+          const headers = source.headers.map((value) => String(value ?? ''))
+          const rows = source.rows
+            .filter((row) => Array.isArray(row))
+            .map((row) => {
+              const out = row.slice(0, headers.length).map((value) => String(value ?? ''))
+              while (out.length < headers.length) out.push('')
+              return out
+            })
+          return { headers: headers, rows: rows }
+        }
+
         function saveWorkspaceState() {
           try {
             localStorage.setItem(
@@ -6990,6 +7003,7 @@
               JSON.stringify({
                 version: STORAGE_VERSION,
                 state: Object.fromEntries(GLOBAL_PERSIST_KEYS.map((k) => [k, state[k]])),
+                data: sanitizePersistedData(state.data),
               }),
             )
           } catch (e) {
@@ -7041,6 +7055,8 @@
                       legacyDataSelection[k] = structuredClone(workspace.state[k])
                     }
                   })
+                  const restoredData = sanitizePersistedData(workspace.data)
+                  if (restoredData) state.data = restoredData
                   workspaceLoaded = true
                 }
               } catch (e) {
@@ -7823,24 +7839,58 @@
         function fontOptionList() {
           return FONT_FAMILY_OPTIONS.map(([value, label]) => [value, label])
         }
-        function palette() {
-          const base = {
-            mono: ['#151515', '#555555', '#777777', '#999999', '#b5b5b5', '#3c3c3c'],
-            culture: ['#7B2D26', '#C66B3D', '#B28A3E', '#5F6B5D', '#6B4C5B', '#8A6A4A'],
-            science: ['#155EEF', '#009688', '#2E7D32', '#6A5ACD', '#F28E2B', '#607487'],
-            editorial: ['#E76F51', '#2A9D8F', '#E9C46A', '#6C5CE7', '#F72585', '#264653'],
+        const ZENVIZ_PALETTES = Object.freeze({
+          mono: Object.freeze(["#151515", "#555555", "#777777", "#999999", "#b5b5b5", "#3c3c3c"]),
+          culture: Object.freeze(["#7B2D26", "#C66B3D", "#B28A3E", "#5F6B5D", "#6B4C5B", "#8A6A4A"]),
+          science: Object.freeze(["#155EEF", "#009688", "#2E7D32", "#6A5ACD", "#F28E2B", "#607487"]),
+          editorial: Object.freeze(["#E76F51", "#2A9D8F", "#E9C46A", "#6C5CE7", "#F72585", "#264653"]),
+        })
+        const ZENVIZ_NEUTRALS = Object.freeze(["#f7f7f7", "#dddddd", "#aaaaaa", "#777777", "#444444"])
+        const ZENVIZ_RAMPS = Object.freeze({
+          correlation: Object.freeze(["#2c7fb8", "#ffffff", "#d73027"]),
+        })
+        function chartUIColor(token) {
+          try {
+            const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+            if (value) return value
+          } catch (e) { /* VM / 非浏览器环境 */ }
+          try { return getComputedStyle(document.body).color } catch (e) { return 'currentColor' }
+        }
+        function chartPaperColor() {
+          try {
+            const value = getComputedStyle(document.documentElement).getPropertyValue('--zen-paper').trim()
+            if (value) return value
+          } catch (e) { /* VM / 非浏览器环境 */ }
+          try { return getComputedStyle(document.body).backgroundColor || 'transparent' } catch (e) { return 'transparent' }
+        }
+        function withAlpha(color, alpha) {
+          const value = String(color || '').trim()
+          const hex = value.replace('#', '')
+          if (/^[0-9a-f]{3}$/i.test(hex)) {
+            const rgb = hex.split('').map((part) => parseInt(part + part, 16))
+            return `rgba(${rgb.join(',')},${alpha})`
           }
-          return base[state.palette] || base.science
+          if (/^[0-9a-f]{6}$/i.test(hex)) {
+            const rgb = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16))
+            return `rgba(${rgb.join(',')},${alpha})`
+          }
+          const match = value.match(/^rgba?\(([^)]+)\)$/i)
+          if (match) {
+            const parts = match[1].split(',').map((part) => part.trim())
+            return `rgba(${parts.slice(0, 3).join(',')},${alpha})`
+          }
+          return value
+        }
+        function chartInk() { return chartUIColor('--zen-ink') }
+        function chartPaper() { return chartPaperColor() }
+        function chartInkAlpha(alpha) { return withAlpha(chartInk(), alpha) }
+        function chartPaperAlpha(alpha) { return withAlpha(chartPaper(), alpha) }
+        function palette() {
+          return ZENVIZ_PALETTES[state.palette] || ZENVIZ_PALETTES.science
         }
         function palettePreview(id) {
-          const colors =
-            {
-              mono: ['#151515', '#555555', '#777777', '#999999', '#b5b5b5', '#3c3c3c'],
-              culture: ['#7B2D26', '#C66B3D', '#B28A3E', '#5F6B5D', '#6B4C5B', '#8A6A4A'],
-              science: ['#155EEF', '#009688', '#2E7D32', '#6A5ACD', '#F28E2B', '#607487'],
-              editorial: ['#E76F51', '#2A9D8F', '#E9C46A', '#6C5CE7', '#F72585', '#264653'],
-            }[id] || []
-          return colors.map((c, i) => `<i class="p-${id}-${i}"></i>`).join('')
+          const colors = ZENVIZ_PALETTES[id] || []
+          return colors.map((color) => `<i style="background:${escapeHtml(color)}"></i>`).join('')
         }
         function applyBg(cls) {
           const bg = cls || 'plain'
@@ -9476,19 +9526,19 @@
             animationDuration: 240,
             animationEasing: 'cubicOut',
             // 开启透明导出时不铺白底，导出的 SVG / PNG 才是真透明
-            backgroundColor: exportTransparent() ? 'transparent' : '#ffffff',
-            textStyle: { fontFamily: getChartFontFamily('xAxis'), color: '#151515' },
+            backgroundColor: exportTransparent() ? 'transparent' : chartPaper(),
+            textStyle: { fontFamily: getChartFontFamily('xAxis'), color: chartInk() },
             color: c,
             tooltip: {
               trigger: 'axis',
-              backgroundColor: '#fff',
-              borderColor: '#151515',
+              backgroundColor: chartPaper(),
+              borderColor: chartInk(),
               textStyle: {
                 fontFamily: getChartFontFamily('tooltip'),
                 fontSize: 10,
-                color: '#151515',
+                color: chartInk(),
               },
-              axisPointer: { type: 'line', lineStyle: { color: 'rgba(21,21,21,.2)' } },
+              axisPointer: { type: 'line', lineStyle: { color: chartInkAlpha(.2) } },
             },
             legend: { show: false, selectedMode: true },
             grid: {
@@ -9497,7 +9547,7 @@
               top: 54,
               bottom: 64,
               containLabel: true,
-              borderColor: 'rgba(21,21,21,.12)',
+              borderColor: chartInkAlpha(.12),
             },
             xAxis: {
               type: 'category',
@@ -9508,14 +9558,14 @@
               nameTextStyle: {
                 fontFamily: getChartFontFamily('xAxis'),
                 fontSize: state.axisSize,
-                color: 'rgba(21,21,21,.5)',
+                color: chartInkAlpha(.5),
               },
-              axisLine: { lineStyle: { color: 'rgba(21,21,21,.35)' } },
+              axisLine: { lineStyle: { color: chartInkAlpha(.35) } },
               axisTick: { show: false },
               axisLabel: {
                 fontFamily: getChartFontFamily('xAxis'),
                 fontSize: state.axisSize,
-                color: 'rgba(21,21,21,.58)',
+                color: chartInkAlpha(.58),
                 rotate: state.rotateLabels,
                 margin: 10,
               },
@@ -9529,14 +9579,14 @@
               nameTextStyle: {
                 fontFamily: getChartFontFamily('yAxis'),
                 fontSize: state.axisSize,
-                color: 'rgba(21,21,21,.5)',
+                color: chartInkAlpha(.5),
               },
               axisLine: { show: false },
               axisTick: { show: false },
               axisLabel: {
                 fontFamily: getChartFontFamily('yAxis'),
                 fontSize: state.axisSize,
-                color: 'rgba(21,21,21,.58)',
+                color: chartInkAlpha(.58),
                 margin: 10,
               },
               min:
@@ -9549,7 +9599,7 @@
                   : undefined,
               splitLine: {
                 show: chartProp('showGrid', state.showGrid),
-                lineStyle: { color: 'rgba(21,21,21,.08)', type: 'solid' },
+                lineStyle: { color: chartInkAlpha(.08), type: 'solid' },
               },
             },
             title: echartsTitle(),
@@ -9607,7 +9657,7 @@
               barMaxWidth: p.barWidth,
               barCategoryGap: p.gap + '%',
               itemStyle: { opacity: state.opacity },
-              label: { show: p.showValues, fontSize: 9, color: '#151515', position: 'top' },
+              label: { show: p.showValues, fontSize: 9, color: chartInk(), position: 'top' },
             }))
             opt.legend.show = false
             opt.yAxis.splitLine.show = p.showGrid
@@ -9662,8 +9712,8 @@
               animation: true,
               tooltip: {
                 trigger: 'item',
-                backgroundColor: '#fff',
-                borderColor: '#151515',
+                backgroundColor: chartPaper(),
+                borderColor: chartInk(),
                 textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 10 },
                 formatter: (params) =>
                   `${escapeHtml(params.name)}<br/>${escapeHtml(params.value)} · ${escapeHtml(params.percent)}%`,
@@ -9684,9 +9734,9 @@
                     show: p.showLabels,
                     fontFamily: getChartFontFamily('xAxis'),
                     fontSize: 10,
-                    color: '#151515',
+                    color: chartInk(),
                   },
-                  itemStyle: { borderColor: '#fff', borderWidth: 1 },
+                  itemStyle: { borderColor: chartPaper(), borderWidth: 1 },
                   data: slices.map((slice, i) => ({
                     name: slice.name,
                     value: slice.value,
@@ -9712,17 +9762,17 @@
                   max: Math.max(...s.series.flatMap((a) => a.data.map(numeric))) || 100,
                 })),
                 axisName: {
-                  color: 'rgba(21,21,21,.65)',
+                  color: chartInkAlpha(.65),
                   fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: ['rgba(21,21,21,.1)'] },
+                  lineStyle: { color: [chartInkAlpha(.1)] },
                 },
                 splitArea: {
                   show: p.showGrid !== false,
-                  areaStyle: { color: ['rgba(21,21,21,.01)', 'rgba(21,21,21,.035)'] },
+                  areaStyle: { color: [chartInkAlpha(.01), chartInkAlpha(.035)] },
                 },
               },
               series: [
@@ -9750,24 +9800,24 @@
               title: echartsTitle(),
               tooltip: {
                 position: 'top',
-                backgroundColor: '#fff',
-                borderColor: '#151515',
+                backgroundColor: chartPaper(),
+                borderColor: chartInk(),
                 textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
               },
               grid: { left: 70, right: 28, top: 65, bottom: 55 },
               xAxis: {
                 type: 'category',
                 data: s.labels,
-                axisLine: { lineStyle: { color: 'rgba(21,21,21,.25)' } },
+                axisLine: { lineStyle: { color: chartInkAlpha(.25) } },
                 axisTick: { show: false },
                 axisLabel: {
                   fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
-                  color: 'rgba(21,21,21,.58)',
+                  color: chartInkAlpha(.58),
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: 'rgba(21,21,21,.06)' },
+                  lineStyle: { color: chartInkAlpha(.06) },
                 },
               },
               yAxis: {
@@ -9778,11 +9828,11 @@
                 axisLabel: {
                   fontFamily: getChartFontFamily('yAxis'),
                   fontSize: 9,
-                  color: 'rgba(21,21,21,.58)',
+                  color: chartInkAlpha(.58),
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: 'rgba(21,21,21,.06)' },
+                  lineStyle: { color: chartInkAlpha(.06) },
                 },
               },
               visualMap: {
@@ -9803,10 +9853,10 @@
                     show: p.showValues,
                     fontFamily: getChartFontFamily('xAxis'),
                     fontSize: 9,
-                    color: '#151515',
+                    color: chartInk(),
                   },
                   itemStyle: {
-                    borderColor: p.showGrid !== false ? '#fff' : 'transparent',
+                    borderColor: p.showGrid !== false ? chartPaper() : 'transparent',
                     borderWidth: p.showGrid !== false ? p.cellGap : 0,
                   },
                 },
@@ -9847,7 +9897,7 @@
                   fontFamily: getChartFontFamily(isX ? 'xAxis' : 'yAxis'),
                   fontSize: state.axisSize,
                   fontWeight: 400,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                 },
               }
             }
@@ -9905,7 +9955,7 @@
           }
           const ca = parse(a),
             cb = parse(b)
-          if (!ca || !cb) return b || a || '#777777'
+          if (!ca || !cb) return b || a || chartInkAlpha(.5)
           const ratio = Math.max(0, Math.min(1, Number(t) || 0))
           const rgb = ca.map((v, i) => Math.round(v + (cb[i] - v) * ratio))
           return '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('')
@@ -9913,12 +9963,12 @@
         function heatmapColors() {
           // 热图与等值矩阵只受当前图表“配色”控制，不再存在独立色阶选择。
           const colors = palette()
-          if (!colors.length) return ['#f7f7f7', '#dddddd', '#aaaaaa', '#777777', '#444444']
+          if (!colors.length) return ZENVIZ_NEUTRALS.slice()
           const dominant = colors[0]
           const stops = 7
           return Array.from({ length: stops }, (_, i) => {
             const t = 0.06 + (0.94 * i) / (stops - 1)
-            return mixHex('#ffffff', dominant, t)
+            return mixHex(chartPaper(), dominant, t)
           })
         }
 
@@ -9938,8 +9988,8 @@
             animation: true,
             title: echartsTitle(),
             tooltip: {
-              backgroundColor: '#fff',
-              borderColor: '#151515',
+              backgroundColor: chartPaper(),
+              borderColor: chartInk(),
               textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
             },
             series: [
@@ -9961,10 +10011,10 @@
                 })),
                 links: rows.map((r) => ({ source: r.source, target: r.target, value: r.value })),
                 force: { repulsion: p.repulsion, edgeLength: p.edgeLength },
-                lineStyle: { color: 'rgba(21,21,21,.2)', width: p.lineWidth },
+                lineStyle: { color: chartInkAlpha(.2), width: p.lineWidth },
                 label: {
                   show: p.showLabels,
-                  color: 'rgba(21,21,21,.72)',
+                  color: chartInkAlpha(.72),
                   fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
                 },
@@ -9988,8 +10038,8 @@
             animation: true,
             title: echartsTitle(),
             tooltip: {
-              backgroundColor: '#fff',
-              borderColor: '#151515',
+              backgroundColor: chartPaper(),
+              borderColor: chartInk(),
               textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
             },
             series: [
@@ -10013,7 +10063,7 @@
                   show: p.showLabels,
                   fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
-                  color: '#151515',
+                  color: chartInk(),
                 },
               },
             ],
@@ -10036,12 +10086,12 @@
               axisLabel: {
                 fontFamily: getChartFontFamily('yAxis'),
                 fontSize: p.axisFont,
-                color: 'rgba(21,21,21,.5)',
+                color: chartInkAlpha(.5),
               },
               nameTextStyle: {
                 fontFamily: getChartFontFamily('xAxis'),
                 fontSize: p.axisFont,
-                color: 'rgba(21,21,21,.5)',
+                color: chartInkAlpha(.5),
               },
             })),
             series: s.labels.map((_, ri) => ({
@@ -10080,17 +10130,17 @@
             xAxis: {
               type: 'category',
               data: s.series.map((a) => a.name),
-              axisLine: { lineStyle: { color: 'rgba(21,21,21,.3)' } },
+              axisLine: { lineStyle: { color: chartInkAlpha(.3) } },
               axisTick: { show: false },
               axisLabel: {
                 fontFamily: getChartFontFamily('xAxis'),
                 fontSize: 9,
-                color: 'rgba(21,21,21,.58)',
+                color: chartInkAlpha(.58),
               },
             },
             yAxis: {
               type: 'value',
-              splitLine: { show: p.showGrid, lineStyle: { color: 'rgba(21,21,21,.08)' } },
+              splitLine: { show: p.showGrid, lineStyle: { color: chartInkAlpha(.08) } },
               axisLabel: { fontFamily: getChartFontFamily('yAxis'), fontSize: 9 },
             },
             series: [
@@ -10120,7 +10170,7 @@
           }
         }
         function contrastGray(hex, factor) {
-          const raw = String(hex || '#808080').replace('#', '')
+          const raw = String(hex || chartInk()).replace('#', '')
           if (!/^[0-9a-f]{6}$/i.test(raw)) return hex
           const f = Math.max(0.5, Math.min(2, Number(factor) || 1))
           const rgb = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
@@ -10155,14 +10205,14 @@
                 fontSize: 8,
                 interval: Math.max(0, Math.ceil(xs.length / p.resolution) - 1),
               },
-              splitLine: { show: p.showGrid !== false, lineStyle: { color: 'rgba(21,21,21,.06)' } },
+              splitLine: { show: p.showGrid !== false, lineStyle: { color: chartInkAlpha(.06) } },
             },
             yAxis: {
               type: 'category',
               data: series.map((a) => a.name),
               axisTick: { show: false },
               axisLabel: { fontFamily: getChartFontFamily('yAxis'), fontSize: 8 },
-              splitLine: { show: p.showGrid !== false, lineStyle: { color: 'rgba(21,21,21,.06)' } },
+              splitLine: { show: p.showGrid !== false, lineStyle: { color: chartInkAlpha(.06) } },
             },
             visualMap: {
               min: minV,
@@ -10179,10 +10229,10 @@
                 data: vals,
                 label: { show: p.showLabels, fontFamily: getChartFontFamily('xAxis'), fontSize: 7 },
                 itemStyle: {
-                  borderColor: p.showGrid !== false ? '#ffffff' : 'transparent',
+                  borderColor: p.showGrid !== false ? chartPaper() : 'transparent',
                   borderWidth: p.showGrid !== false ? 1 : 0,
                 },
-                emphasis: { itemStyle: { shadowBlur: 3, shadowColor: 'rgba(0,0,0,.08)' } },
+                emphasis: { itemStyle: { shadowBlur: 3, shadowColor: chartInkAlpha(.08) } },
               },
             ],
           }
@@ -10208,7 +10258,7 @@
             const ctx = chart.ctx
             ctx.save()
             ctx.font = `9px ${getChartFontFamily('xAxis')}`
-            ctx.fillStyle = 'rgba(21,21,21,.72)'
+            ctx.fillStyle = chartInkAlpha(.72)
             ctx.textAlign = 'center'
             ctx.textBaseline = 'bottom'
             if (chart.config.type === 'bar') {
@@ -10401,7 +10451,7 @@
               label: '饼图',
               data: slices.map((slice) => slice.value),
               backgroundColor: slices.map((_, i) => c[i % c.length]),
-              borderColor: slices.map(() => '#ffffff'),
+              borderColor: slices.map(() => chartPaper()),
               borderWidth: 1,
               hoverBackgroundColor: slices.map((_, i) => c[i % c.length]),
             }
@@ -10420,13 +10470,13 @@
                 ticks: { display: false },
                 grid: {
                   display: p.showGrid !== false,
-                  color: 'rgba(21,21,21,.1)',
+                  color: chartInkAlpha(.1),
                   circular: p.shape === 'circle',
                 },
-                angleLines: { color: 'rgba(21,21,21,.12)' },
+                angleLines: { color: chartInkAlpha(.12) },
                 pointLabels: {
                   font: { family: getChartFontFamily('xAxis'), size: 9 },
-                  color: 'rgba(21,21,21,.65)',
+                  color: chartInkAlpha(.65),
                 },
               },
             }
@@ -10444,16 +10494,16 @@
                 title: {
                   display: !!state.xTitle,
                   text: state.xTitle,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                   font: {
                     family: getChartFontFamily('xAxis'),
                     size: state.axisSize,
                     weight: '400',
                   },
                 },
-                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
+                grid: { display: p.showGrid ?? true, color: chartInkAlpha(.08) },
                 ticks: {
-                  color: 'rgba(21,21,21,.55)',
+                  color: chartInkAlpha(.55),
                   font: { family: getChartFontFamily('xAxis') },
                   maxRotation: p.rotateLabels ?? 0,
                   minRotation: p.rotateLabels ?? 0,
@@ -10467,16 +10517,16 @@
                 title: {
                   display: !!state.yTitle,
                   text: state.yTitle,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                   font: {
                     family: getChartFontFamily('yAxis'),
                     size: state.axisSize,
                     weight: '400',
                   },
                 },
-                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
+                grid: { display: p.showGrid ?? true, color: chartInkAlpha(.08) },
                 ticks: {
-                  color: 'rgba(21,21,21,.55)',
+                  color: chartInkAlpha(.55),
                   font: { family: getChartFontFamily('yAxis') },
                 },
                 stacked: !!p.stacked,
@@ -10489,16 +10539,16 @@
                 title: {
                   display: !!state.xTitle,
                   text: state.xTitle,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                   font: {
                     family: getChartFontFamily('xAxis'),
                     size: state.axisSize,
                     weight: '400',
                   },
                 },
-                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
+                grid: { display: p.showGrid ?? true, color: chartInkAlpha(.08) },
                 ticks: {
-                  color: 'rgba(21,21,21,.55)',
+                  color: chartInkAlpha(.55),
                   font: { family: getChartFontFamily('xAxis') },
                   maxRotation: p.rotateLabels ?? 0,
                   minRotation: p.rotateLabels ?? 0,
@@ -10509,16 +10559,16 @@
                 title: {
                   display: !!state.yTitle,
                   text: state.yTitle,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                   font: {
                     family: getChartFontFamily('yAxis'),
                     size: state.axisSize,
                     weight: '400',
                   },
                 },
-                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
+                grid: { display: p.showGrid ?? true, color: chartInkAlpha(.08) },
                 ticks: {
-                  color: 'rgba(21,21,21,.55)',
+                  color: chartInkAlpha(.55),
                   font: { family: getChartFontFamily('yAxis') },
                 },
                 stacked: t === 'area' ? !!p.stacked : false,
@@ -10534,7 +10584,7 @@
             common.scales.x.title = {
               display: !!state.xTitle,
               text: state.xTitle,
-              color: 'rgba(21,21,21,.5)',
+              color: chartInkAlpha(.5),
               font: {
                 family: getChartFontFamily('xAxis'),
                 size: state.axisSize,
@@ -10542,7 +10592,7 @@
               },
             }
             common.scales.x.ticks = {
-              color: 'rgba(21,21,21,.55)',
+              color: chartInkAlpha(.55),
               font: { family: getChartFontFamily('xAxis') },
               maxRotation: state.rotateLabels ?? 0,
               minRotation: state.rotateLabels ?? 0,
@@ -10670,7 +10720,7 @@
             },
             grid: {
               show: p.showGrid ?? state.showGrid,
-              borderColor: 'rgba(21,21,21,.08)',
+              borderColor: chartInkAlpha(.08),
               strokeDashArray: 0,
             },
             legend: { show: false },
@@ -10684,19 +10734,19 @@
                   fontFamily: getChartFontFamily('xAxis'),
                   fontSize: '9px',
                   fontWeight: 400,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                 },
               },
               labels: {
                 style: {
                   fontFamily: getChartFontFamily('xAxis'),
-                  colors: Array(s.labels.length).fill('rgba(21,21,21,.55)'),
+                  colors: Array(s.labels.length).fill(chartInkAlpha(.55)),
                   fontSize: '9px',
                 },
                 rotate:
                   t === 'bar' || t === 'scatter' ? (p.rotateLabels ?? state.rotateLabels ?? 0) : 0,
               },
-              axisBorder: { color: 'rgba(21,21,21,.25)' },
+              axisBorder: { color: chartInkAlpha(.25) },
               axisTicks: { show: false },
             },
             yaxis: {
@@ -10706,13 +10756,13 @@
                   fontFamily: getChartFontFamily('yAxis'),
                   fontSize: '9px',
                   fontWeight: 400,
-                  color: 'rgba(21,21,21,.5)',
+                  color: chartInkAlpha(.5),
                 },
               },
               labels: {
                 style: {
                   fontFamily: getChartFontFamily('yAxis'),
-                  colors: ['rgba(21,21,21,.55)'],
+                  colors: [chartInkAlpha(.55)],
                   fontSize: '9px',
                 },
               },
@@ -10768,10 +10818,10 @@
               radar: {
                 size: Number.isFinite(Number(p.radius)) ? Number(p.radius) : 58,
                 polygons: {
-                  strokeColors: p.showGrid !== false ? 'rgba(21,21,21,.1)' : 'transparent',
+                  strokeColors: p.showGrid !== false ? chartInkAlpha(.1) : 'transparent',
                   strokeWidth: p.showGrid !== false ? 1 : 0,
-                  connectorColors: p.showGrid !== false ? 'rgba(21,21,21,.12)' : 'transparent',
-                  fill: { colors: ['rgba(21,21,21,.01)', 'rgba(21,21,21,.035)'] },
+                  connectorColors: p.showGrid !== false ? chartInkAlpha(.12) : 'transparent',
+                  fill: { colors: [chartInkAlpha(.01), chartInkAlpha(.035)] },
                 },
               },
             }
@@ -10800,7 +10850,7 @@
                 show: true,
                 style: {
                   fontFamily: getChartFontFamily('xAxis'),
-                  colors: Array(s.labels.length).fill('rgba(21,21,21,.58)'),
+                  colors: Array(s.labels.length).fill(chartInkAlpha(.58)),
                   fontSize: '9px',
                 },
               },
@@ -10819,7 +10869,7 @@
                 polarArea: { rings: { strokeWidth: 1 }, spokes: { strokeWidth: 0 } },
               }
               opt.chart = { ...opt.chart, type: 'polarArea' }
-              opt.stroke = { width: 1, colors: ['#ffffff'] }
+              opt.stroke = { width: 1, colors: [chartPaper()] }
             } else {
               opt.plotOptions = {
                 pie: {
@@ -10828,7 +10878,7 @@
                   expandOnClick: true,
                 },
               }
-              opt.stroke = { width: 1, colors: ['#ffffff'] }
+              opt.stroke = { width: 1, colors: [chartPaper()] }
             }
             opt.fill = { opacity: 1 }
             opt.dataLabels = {
@@ -10868,7 +10918,7 @@
           }
         }
         function drawZenGrid(svg, x0, x1, y0, y1, rows = 5, cols = 8) {
-          const stroke = 'rgba(21,21,21,.075)'
+          const stroke = chartInkAlpha(.075)
           for (let i = 1; i < rows; i++) {
             const y = y0 + ((y1 - y0) * i) / rows
             svg.appendChild(svgEl('line', { x1: x0, y1: y, x2: x1, y2: y, stroke }))
@@ -10926,7 +10976,7 @@
                 'font-family': getChartFontFamily('title'),
                 'font-size': 18,
                 'font-weight': 500,
-                fill: '#151515',
+                fill: chartInk(),
               },
               state.title,
             ),
@@ -10939,14 +10989,14 @@
                 y: 54,
                 'font-family': getChartFontFamily('title'),
                 'font-size': 9,
-                fill: 'rgba(21,21,21,.48)',
+                fill: chartInkAlpha(.48),
                 'letter-spacing': 0.8,
               },
               state.subtitle,
             ),
           )
           svg.appendChild(
-            svgEl('line', { x1: 32, y1: 68, x2: W - 32, y2: 68, stroke: 'rgba(21,21,21,.12)' }),
+            svgEl('line', { x1: 32, y1: 68, x2: W - 32, y2: 68, stroke: chartInkAlpha(.12) }),
           )
         }
         function drawSlope(svg, W, H) {
@@ -10983,7 +11033,7 @@
                 cx: left,
                 cy: y1,
                 r: p.pointSize,
-                fill: '#fff',
+                fill: chartPaper(),
                 stroke: col,
                 'stroke-width': 1.5,
               }),
@@ -11006,7 +11056,7 @@
                   y: y1 + 3,
                   'text-anchor': 'end',
                   'font-size': 9,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 s.labels[i],
               ),
@@ -11015,7 +11065,7 @@
               svg.appendChild(
                 svgEl(
                   'text',
-                  { x: right + 12, y: y2 + 3, 'font-size': 9, fill: '#151515' },
+                  { x: right + 12, y: y2 + 3, 'font-size': 9, fill: chartInk() },
                   String(b[i]),
                 ),
               )
@@ -11023,14 +11073,14 @@
           svg.appendChild(
             svgEl(
               'text',
-              { x: left, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
+              { x: left, y: 550, 'font-size': 9, fill: chartInkAlpha(.4) },
               s.series[0].name,
             ),
           )
           svg.appendChild(
             svgEl(
               'text',
-              { x: right, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
+              { x: right, y: 550, 'font-size': 9, fill: chartInkAlpha(.4) },
               s.series[1].name,
             ),
           )
@@ -11048,7 +11098,7 @@
               y1: y,
               x2: x1,
               y2: y,
-              stroke: 'rgba(21,21,21,.28)',
+              stroke: chartInkAlpha(.28),
               'stroke-width': 1.2,
             }),
           )
@@ -11062,7 +11112,7 @@
                 y1: y,
                 x2: x,
                 y2: y + up * p.stemLength,
-                stroke: 'rgba(21,21,21,.45)',
+                stroke: chartInkAlpha(.45),
                 'stroke-width': 1,
               }),
             )
@@ -11082,7 +11132,7 @@
                   y: y + up * (p.stemLength + 15),
                   'text-anchor': 'middle',
                   'font-size': 9,
-                  fill: 'rgba(21,21,21,.6)',
+                  fill: chartInkAlpha(.6),
                 },
                 l,
               ),
@@ -11096,7 +11146,7 @@
                     y: y + up * (p.stemLength - 12),
                     'text-anchor': 'middle',
                     'font-size': 9,
-                    fill: '#151515',
+                    fill: chartInk(),
                   },
                   String(val),
                 ),
@@ -11117,7 +11167,7 @@
           if (p.baseline && min <= 0 && max >= 0) {
             const bx = x0 + ((0 - min) / (max - min || 1)) * (x1 - x0)
             svg.appendChild(
-              svgEl('line', { x1: bx, y1: 95, x2: bx, y2: 520, stroke: 'rgba(21,21,21,.25)' }),
+              svgEl('line', { x1: bx, y1: 95, x2: bx, y2: 520, stroke: chartInkAlpha(.25) }),
             )
           }
           s.labels.forEach((label, i) => {
@@ -11142,7 +11192,7 @@
                   y: y + 3,
                   'text-anchor': 'end',
                   'font-size': 9,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 label,
               ),
@@ -11371,13 +11421,13 @@
                   width: w,
                   height: h,
                   fill: 'none',
-                  stroke: 'rgba(21,21,21,.12)',
+                  stroke: chartInkAlpha(.12),
                 }),
               )
             svg.appendChild(
               svgEl(
                 'text',
-                { x: cx + 10, y: cy + 16, 'font-size': 9, fill: 'rgba(21,21,21,.55)' },
+                { x: cx + 10, y: cy + 16, 'font-size': 9, fill: chartInkAlpha(.55) },
                 a.name,
               ),
             )
@@ -11435,7 +11485,7 @@
                 y1: a.y,
                 x2: b.x,
                 y2: b.y,
-                stroke: 'rgba(21,21,21,.18)',
+                stroke: chartInkAlpha(.18),
                 'stroke-width': Math.max(
                   0.5,
                   Math.min(5, Number(p.lineWidth) * (0.7 + Math.sqrt(r.value) * 0.08)),
@@ -11449,7 +11499,7 @@
                 cx: n.x,
                 cy: n.y,
                 r: n.radius,
-                fill: '#fff',
+                fill: chartPaper(),
                 stroke: palette()[i % palette().length],
                 'stroke-width': 1.4,
               }),
@@ -11463,7 +11513,7 @@
                     y: n.y + 3,
                     'text-anchor': 'middle',
                     'font-size': 8,
-                    fill: '#151515',
+                    fill: chartInk(),
                   },
                   n.name,
                 ),
@@ -11502,12 +11552,12 @@
             return den > 0 ? Math.max(-1, Math.min(1, num / den)) : 0
           }
           const colors = palette()
-          const positiveColor = colors[0] || '#155EEF'
-          const negativeColor = colors[Math.max(0, colors.length - 1)] || '#607487'
+          const positiveColor = colors[0] || palette()[0]
+          const negativeColor = colors[Math.max(0, colors.length - 1)] || palette()[palette().length - 1]
           const correlationFill = (v) => {
             const strength = Math.min(1, Math.abs(Number(v) || 0))
             const base = Number(v) >= 0 ? positiveColor : negativeColor
-            return mixHex('#ffffff', base, Math.min(0.92, 0.08 + strength * 0.84 * p.intensity))
+            return mixHex(chartPaper(), base, Math.min(0.92, 0.08 + strength * 0.84 * p.intensity))
           }
           for (let i = 0; i < n; i++) {
             svg.appendChild(
@@ -11518,7 +11568,7 @@
                   y: y0 - 12,
                   'text-anchor': 'middle',
                   'font-size': 8,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 names[i],
               ),
@@ -11531,7 +11581,7 @@
                   y: y0 + i * cell + cell / 2 + 3,
                   'text-anchor': 'end',
                   'font-size': 8,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 names[i],
               ),
@@ -11548,7 +11598,7 @@
                   width: cell - 3,
                   height: cell - 3,
                   fill: correlationFill(v),
-                  stroke: p.showGrid !== false ? 'rgba(255,255,255,.85)' : 'none',
+                  stroke: p.showGrid !== false ? chartPaperAlpha(.85) : 'none',
                   'stroke-width': p.showGrid !== false ? 1 : 0,
                 }),
               )
@@ -11560,7 +11610,7 @@
                     y: y0 + i * cell + (cell - 3) / 2 + 3,
                     'text-anchor': 'middle',
                     'font-size': 8,
-                    fill: strength > 0.56 ? '#fff' : '#151515',
+                    fill: strength > 0.56 ? chartPaper() : chartInk(),
                   },
                   v.toFixed(p.precision),
                 ),
@@ -11609,7 +11659,7 @@
                     y: y0 - h - 6,
                     'text-anchor': 'middle',
                     'font-size': 8,
-                    fill: 'rgba(21,21,21,.7)',
+                    fill: chartInkAlpha(.7),
                   },
                   String(c),
                 ),
@@ -11695,7 +11745,7 @@
                 cx: x,
                 cy: y,
                 r: p.pointSize,
-                fill: '#fff',
+                fill: chartPaper(),
                 stroke: col,
                 'stroke-width': p.lineWidth,
               }),
@@ -11708,7 +11758,7 @@
                   y: yBottom + 18,
                   'text-anchor': 'middle',
                   'font-size': 8,
-                  fill: 'rgba(21,21,21,.5)',
+                  fill: chartInkAlpha(.5),
                 },
                 d.label,
               ),
@@ -11757,7 +11807,7 @@
                     y: yTop + i * p.rowGap + 3,
                     'text-anchor': 'end',
                     'font-size': 8,
-                    fill: 'rgba(21,21,21,.55)',
+                    fill: chartInkAlpha(.55),
                   },
                   ser.name,
                 ),
@@ -11839,7 +11889,7 @@
                 cx: x2,
                 cy: y2,
                 r: p.nodeSize,
-                fill: '#fff',
+                fill: chartPaper(),
                 stroke: col,
                 'stroke-width': 1.2,
               }),
@@ -11853,14 +11903,14 @@
                     y: y2 - 8,
                     'text-anchor': 'middle',
                     'font-size': 7,
-                    fill: 'rgba(21,21,21,.58)',
+                    fill: chartInkAlpha(.58),
                   },
                   s.labels[i],
                 ),
               )
           }
           svg.appendChild(
-            svgEl('circle', { cx, cy, r: R, fill: 'none', stroke: 'rgba(21,21,21,.12)' }),
+            svgEl('circle', { cx, cy, r: R, fill: 'none', stroke: chartInkAlpha(.12) }),
           )
         }
         function drawChord(svg, W, H) {
@@ -11883,7 +11933,7 @@
               cy,
               r: R,
               fill: 'none',
-              stroke: 'rgba(21,21,21,.10)',
+              stroke: chartInkAlpha(.1),
               'stroke-width': 1,
             }),
           )
@@ -11918,7 +11968,7 @@
                 cx: q.x,
                 cy: q.y,
                 r: p.nodeSize,
-                fill: '#fff',
+                fill: chartPaper(),
                 stroke: col,
                 'stroke-width': 1.5,
               }),
@@ -11935,7 +11985,7 @@
                     'text-anchor':
                       Math.cos(q.a) > 0.35 ? 'start' : Math.cos(q.a) < -0.35 ? 'end' : 'middle',
                     'font-size': 9,
-                    fill: 'rgba(21,21,21,.58)',
+                    fill: chartInkAlpha(.58),
                   },
                   name,
                 ),
@@ -11970,7 +12020,7 @@
                   cx: x,
                   cy: y,
                   r: p.pointSize * (0.75 + norm * 0.9),
-                  fill: '#fff',
+                  fill: chartPaper(),
                   stroke: col,
                   'stroke-width': 1.2,
                   opacity: p.opacity,
@@ -11985,7 +12035,7 @@
                       y: y - 9,
                       'text-anchor': 'middle',
                       'font-size': 8,
-                      fill: 'rgba(21,21,21,.54)',
+                      fill: chartInkAlpha(.54),
                     },
                     s.labels[i] || '',
                   ),
@@ -12033,7 +12083,7 @@
                 cx: x - radius * 0.22,
                 cy: y - radius * 0.28,
                 r: Math.max(1, radius * 0.16),
-                fill: '#fff',
+                fill: chartPaper(),
                 opacity: 0.42,
               }),
             )
@@ -12046,7 +12096,7 @@
                     y: y + radius + 12,
                     'text-anchor': 'middle',
                     'font-size': 7.5,
-                    fill: 'rgba(21,21,21,.50)',
+                    fill: chartInkAlpha(.50),
                   },
                   s.labels[i] || '',
                 ),
@@ -12058,7 +12108,7 @@
               y1: 320,
               x2: baseX + p.spread,
               y2: 320,
-              stroke: 'rgba(21,21,21,.12)',
+              stroke: chartInkAlpha(.12),
               'stroke-width': 1,
             }),
           )
@@ -12132,7 +12182,7 @@
                     y: streamLegendRows()[i]?.y ?? 120 + i * 18,
                     'text-anchor': 'end',
                     'font-size': 8,
-                    fill: 'rgba(21,21,21,.52)',
+                    fill: chartInkAlpha(.52),
                   },
                   item.ser.name,
                 ),
@@ -12149,14 +12199,14 @@
           svg.appendChild(
             svgEl(
               'text',
-              { x: 70, y: 180, 'font-size': p.headlineSize, 'font-weight': 500, fill: '#151515' },
+              { x: 70, y: 180, 'font-size': p.headlineSize, 'font-weight': 500, fill: chartInk() },
               String(Math.round(total)),
             ),
           )
           svg.appendChild(
             svgEl(
               'text',
-              { x: 72, y: 210, 'font-size': 10, 'letter-spacing': 2, fill: 'rgba(21,21,21,.5)' },
+              { x: 72, y: 210, 'font-size': 10, 'letter-spacing': 2, fill: chartInkAlpha(.5) },
               '观测总量',
             ),
           )
@@ -12181,7 +12231,7 @@
                   y: 324 + p.barHeight,
                   'text-anchor': 'middle',
                   'font-size': 9,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 s.labels[i],
               ),
@@ -12234,7 +12284,7 @@
                 y1: y,
                 x2: xx,
                 y2: y,
-                stroke: 'rgba(21,21,21,.2)',
+                stroke: chartInkAlpha(.2),
                 'stroke-width': p.stemWidth,
                 opacity: p.opacity,
               }),
@@ -12250,7 +12300,7 @@
                   y: y + 3,
                   'text-anchor': 'end',
                   'font-size': 8,
-                  fill: 'rgba(21,21,21,.55)',
+                  fill: chartInkAlpha(.55),
                 },
                 d.label,
               ),
@@ -12744,11 +12794,19 @@
           const frame = $('#chart-frame')
           const mount = $('#chart-mount')
           const host = mount?.querySelector('.chartjs-scale-host')
+          if (!frame) throw new Error('图表画布不存在')
+          const designW = Math.max(120, Math.round(Number(state.width) || 1000))
+          const designH = Math.max(120, Math.round(Number(state.height) || 620))
+          const originalParent = frame.parentElement
+          // 导出使用设计尺寸，而不是工作区里适应屏幕后的预览尺寸。
+          const staging = document.createElement('div')
+          staging.style.cssText = `position:fixed;left:-10000px;top:0;width:${designW}px;height:${designH}px;overflow:hidden;pointer-events:none`
           // 抓图前先摘掉工作区的 transform。
           // html2canvas 不解析 CSS transform，chart-mount 上的 scale()/translate()
           // 以及 Chart.js 缩放宿主上的 translate(-50%,-50%) 都会被忽略，
           // 结果就是导出图整体错位、只剩一角（等同于“导出变形”）。
           const saved = [
+            [frame, frame.getAttribute('style')],
             [mount, mount ? mount.getAttribute('style') : null],
             [host, host ? host.getAttribute('style') : null],
           ]
@@ -12770,6 +12828,13 @@
             }
           }
           try {
+            document.body.appendChild(staging)
+            staging.appendChild(frame)
+            frame.style.position = 'absolute'
+            frame.style.left = '0'
+            frame.style.top = '0'
+            frame.style.width = designW + 'px'
+            frame.style.height = designH + 'px'
             if (mount) {
               mount.style.transform = 'none'
               mount.style.left = '0'
@@ -12786,7 +12851,7 @@
             if (transparent) frame.classList.add('is-export-transparent')
             redraw()
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-            const factor = exportScaleFactor(frame.offsetWidth, frame.offsetHeight)
+            const factor = exportScaleFactor(designW, designH)
             const canvas = await html2canvas(frame, {
               // html2canvas 省略 backgroundColor 时会默认铺一层不透明白底，
               // 必须显式传 rgba(0,0,0,0) 才能拿到真正透明的画布。
@@ -12798,6 +12863,8 @@
             return { canvas, capped: factor.capped, transparent }
           } finally {
             frame.classList.remove('is-export-transparent')
+            staging.remove()
+            if (originalParent && frame.parentElement !== originalParent) originalParent.appendChild(frame)
             saved.forEach(([el, style]) => {
               if (!el) return
               if (style === null) el.removeAttribute('style')
@@ -12828,10 +12895,8 @@
         async function svgToCanvas({ transparent = exportTransparent() } = {}) {
           const svgString = getRenderedSVGString({ transparent })
           if (!svgString) throw Error('当前图表没有可栅格化的 SVG 画布')
-          const box = /viewBox="([^"]+)"/.exec(svgString)
-          const dims = box ? box[1].trim().split(/\s+/).map(Number) : []
-          const baseW = Math.max(1, Math.round(dims[2] || state.width || 1000))
-          const baseH = Math.max(1, Math.round(dims[3] || state.height || 620))
+          const baseW = Math.max(120, Math.round(Number(state.width) || 1000))
+          const baseH = Math.max(120, Math.round(Number(state.height) || 620))
           return new Promise((resolve, reject) => {
             const img = new Image()
             img.onload = () => {
@@ -12863,10 +12928,7 @@
          * 一起写进文件，否则打开后整张图会被拉伸并偏移，也就是导出“变形”。
          */
         function exportPaperColor() {
-          const paper = getComputedStyle(document.documentElement)
-            .getPropertyValue('--paper')
-            .trim()
-          return /^(#|rgb|hsl)/i.test(paper) ? paper : '#ffffff'
+          return chartPaper()
         }
         function svgNumber(value, fallback) {
           const n = Number.parseFloat(String(value ?? '').replace(/px/i, ''))
@@ -12932,7 +12994,7 @@
                   'font-size': 16,
                   'font-weight': 500,
                   'letter-spacing': 1,
-                  fill: '#151515',
+                  fill: chartInk(),
                 },
                 title,
               ),
@@ -12953,7 +13015,7 @@
                     'font-family': getChartFontFamily('title'),
                     'font-size': 9,
                     'letter-spacing': 0.8,
-                    fill: 'rgba(21,21,21,.45)',
+                    fill: chartInkAlpha(.45),
                   },
                   subtitle,
                 ),
@@ -13005,9 +13067,9 @@
               y: 0,
               width: boxW,
               height: boxH,
-              fill: '#ffffff',
+              fill: chartPaper(),
               'fill-opacity': 0.96,
-              stroke: '#d8d8d8',
+              stroke: chartInkAlpha(.15),
               'stroke-width': 1,
             }),
           )
@@ -13030,7 +13092,7 @@
                     y: y + 9,
                     'font-family': getChartFontFamily('legend'),
                     'font-size': 10,
-                    fill: 'rgba(21,21,21,.65)',
+                    fill: chartInkAlpha(.65),
                   },
                   item.name,
                 ),
@@ -13068,8 +13130,8 @@
                 .trim()
                 .toLowerCase()
               const isPaper =
-                fill === '#ffffff' ||
-                fill === '#fff' ||
+                fill === chartPaper() ||
+                fill === chartPaper() ||
                 fill === 'white' ||
                 fill === 'rgb(255,255,255)' ||
                 fill === 'transparent'
@@ -13106,9 +13168,8 @@
           if (state.engine === 'zen' && zenSvg?.style.display !== 'none') {
             // 自绘引擎固定画在 1000 × 620 的坐标系里，直接沿用它自己的 viewBox
             const raw = String(zenSvg.getAttribute('viewBox') || '').trim()
-            const box = raw.split(/\s+/).map(Number)
-            const w = box.length === 4 && box[2] > 0 ? box[2] : Number(state.width) || 1000
-            const h = box.length === 4 && box[3] > 0 ? box[3] : Number(state.height) || 620
+            const w = Math.max(120, Math.round(Number(state.width) || 1000))
+            const h = Math.max(120, Math.round(Number(state.height) || 620))
             return buildStandaloneSVGString(zenSvg, w, h, raw || `0 0 ${w} ${h}`, { transparent })
           }
 
@@ -13116,15 +13177,10 @@
           if (mountSvg && (state.engine === 'echarts' || state.engine === 'apexcharts')) {
             // 用布局尺寸（offsetWidth 不含 CSS transform）而不是 getBoundingClientRect，
             // 否则工作区的缩放与位移会被一起写进导出文件。
-            const w = svgNumber(
-              mountSvg.getAttribute('width'),
-              mountSvg.offsetWidth || Number(state.width) || 1000,
-            )
-            const h = svgNumber(
-              mountSvg.getAttribute('height'),
-              mountSvg.offsetHeight || Number(state.height) || 620,
-            )
-            return buildStandaloneSVGString(mountSvg, w, h, undefined, { transparent })
+            const w = Math.max(120, Math.round(Number(state.width) || 1000))
+            const h = Math.max(120, Math.round(Number(state.height) || 620))
+            const viewBox = mountSvg.getAttribute('viewBox') || undefined
+            return buildStandaloneSVGString(mountSvg, w, h, viewBox, { transparent })
           }
 
           return ''
@@ -13785,7 +13841,7 @@
                 xl,
                 yl,
                 M,
-                ['#f7fbff', palette()[0] || '#155EEF'],
+                [ZENVIZ_NEUTRALS[0], palette()[0]],
                 pmin,
                 pmax === pmin ? pmin + 1 : pmax,
                 state.xTitle,
@@ -14062,7 +14118,7 @@
                 names,
                 names,
                 M,
-                ['#2c7fb8', '#ffffff', '#d73027'],
+                ZENVIZ_RAMPS.correlation,
                 -1,
                 1,
                 '',

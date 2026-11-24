@@ -1,13 +1,21 @@
+        function payloadCSV(payload) {
+          if (!window.DataViz || typeof window.DataViz.toCSV !== 'function') {
+            throw new Error('DataViz CSV 组件尚未加载')
+          }
+          if (!Array.isArray(payload.headers) || !Array.isArray(payload.rows)) {
+            throw new Error('投递数据缺少 headers / rows')
+          }
+          return window.DataViz.toCSV({
+            cols: payload.headers.map((name) => ({ name: String(name ?? '') })),
+            rows: payload.rows,
+          })
+        }
         /* 接收数据工作台“一键出图”投递的表格 */
-        if (window.VizBridge) {
+        function installDataReceiver() {
+          if (!window.VizBridge) return
           window.VizBridge.onData(function (payload) {
             try {
-              var csv = payload.csv
-              if (!csv && Array.isArray(payload.headers)) {
-                var lines = [payload.headers.join(',')]
-                ;(payload.rows || []).forEach(function (r) { lines.push((r || []).join(',')) })
-                csv = lines.join('\r\n')
-              }
+              var csv = payloadCSV(payload)
               state.data = parseTextData(String(csv || ''))
               normalizeDataSelection({ fillDefaults: true })
               schedulePersist()
@@ -20,6 +28,9 @@
             }
           })
         }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () { setTimeout(installDataReceiver, 0) })
+        } else installDataReceiver()
 
         /* 送复盘：桌面产品各自使用独立 origin，必须经共享 broker 写入 documents，
          * 不能把记录留在当前产品的 localStorage 里。 */
