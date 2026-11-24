@@ -10,6 +10,7 @@
               }
               state.data = parseTextData(String(csv || ''))
               normalizeDataSelection({ fillDefaults: true })
+              schedulePersist()
               renderDataTable()
               renderChart()
               setStatus('已接收 · ' + (payload.name || '数据表'))
@@ -20,11 +21,10 @@
           })
         }
 
-        /* 送复盘：把当前图表登记为一条复盘动态，交给 Hub 的 live 快照聚合后
-         * 由 ZenReview 拉取。只写自己的 localStorage 键，不碰别的产品。 */
+        /* 送复盘：桌面产品各自使用独立 origin，必须经共享 broker 写入 documents，
+         * 不能把记录留在当前产品的 localStorage 里。 */
         function exportReview() {
           try {
-            const KEY = 'zen.viz.review.v1'
             /* state.data is { headers: [...], rows: [...] }, not a bare array. */
             const data = state.data || {}
             const rows = Array.isArray(data.rows) ? data.rows : []
@@ -36,6 +36,34 @@
               rows: rows.length,
               cols: Array.isArray(data.headers) ? data.headers.length : 0,
             }
+            const share = typeof window !== 'undefined' ? window.OMMShare : null
+            if (share && typeof share.publishRecord === 'function') {
+              setStatus('正在送复盘 · ' + entry.title, 'ok', false)
+              return Promise.resolve(
+                share.publishRecord(entry, {
+                  channel: 'documents',
+                  type: 'text/markdown',
+                  format: 'omm.visualization.review',
+                  title: '复盘 · ' + entry.title,
+                  tags: ['复盘', '可视化'],
+                }),
+              ).then(
+                function () {
+                  setStatus('已送复盘 · ' + entry.title)
+                  return true
+                },
+                function (err) {
+                  reportError('送复盘失败', err, true)
+                  return false
+                },
+              )
+            }
+            if (typeof window !== 'undefined' && window.OMMDesktop) {
+              reportError('送复盘失败', new Error('共享服务不可用'), true)
+              return false
+            }
+            // 仅在共享桥接与桌面桥都缺失的独立页面保留本地记录。
+            const KEY = 'zen.viz.review.v1'
             let list = []
             try { list = JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { list = [] }
             if (!Array.isArray(list)) list = []
@@ -44,6 +72,7 @@
             setStatus('已送复盘 · ' + entry.title)
           } catch (e) {
             reportError('送复盘失败', e, true)
+            return false
           }
         }
         $('#save-review-btn').onclick = exportReview
