@@ -65,6 +65,9 @@
           showTitle: true,
           border: true,
         }
+        let currentView = 'interactive'
+        let latexToken = 0
+        let latexUrl = ''
         const categories = {
           论文: [
             'line',
@@ -14299,6 +14302,114 @@
           } catch (e) {
             reportError('TeX 导出失败', e, true)
           }
+        }
+
+        // ─── View switch ──────────────────────────────────────────────────────
+        // The core only knows the switch and the loading shell. Compiling is a
+        // product hook (window.ZenVizTex.compile), so neither product's service
+        // address or source policy leaks into this shared file.
+        function showView(mode) {
+          currentView = mode
+          const latex = mode === 'latex'
+          $('#chart-stage').hidden = latex
+          $('#latex-view').hidden = !latex
+          $('#view-interactive').setAttribute('aria-pressed', String(!latex))
+          $('#view-latex').setAttribute('aria-pressed', String(latex))
+          $('#fullscreen-btn').disabled = latex
+          $('#latex-error').hidden = true
+          $('#latex-error').textContent = ''
+          if (latex) $('#latex-frame').removeAttribute('src')
+        }
+
+        function latexLoading(message) {
+          $('#latex-loading-text').textContent = message || '正在准备 LaTeX…'
+          $('#latex-loading').hidden = false
+        }
+
+        function latexFailed(err) {
+          latexToken += 1
+          $('#latex-loading').hidden = true
+          const message = err && err.message ? err.message : String(err || '未知错误')
+          $('#latex-error').textContent = 'LaTeX 编译失败 · ' + message
+          $('#latex-error').hidden = false
+          setStatus('LaTeX 编译失败 · ' + message, 'err', false)
+          reportError('LaTeX 视图失败', err, false)
+        }
+
+        async function openLatexView() {
+          const token = ++latexToken
+          if (!state.data || !state.data.headers || !state.data.headers.length) {
+            latexFailed(new Error('请先导入数据并绘制图表'))
+            return
+          }
+          latexLoading('正在生成 LaTeX 源码…')
+          setStatus('正在生成 LaTeX 源码…', 'warn', false)
+          let tex, chart
+          try {
+            tex = buildTeX()
+            chart = {
+              type: state.type,
+              title: state.title,
+              headers: state.data.headers.slice(),
+              rows: state.data.rows.map((row) => row.slice()),
+              x_col: state.xCol,
+              y_cols: state.yCols.slice(),
+            }
+          } catch (e) {
+            latexFailed(e)
+            return
+          }
+          if (token !== latexToken) return
+          if (!window.ZenVizTex || typeof window.ZenVizTex.compile !== 'function') {
+            latexFailed(new Error('当前产品未提供 LaTeX 编译服务'))
+            return
+          }
+          latexLoading('正在编译 LaTeX…')
+          try {
+            const result = await window.ZenVizTex.compile(tex, chart, (message) => {
+              if (token === latexToken) latexLoading(message)
+            })
+            if (token !== latexToken) return
+            if (!result || !result.url) throw new Error((result && result.error) || '编译服务未返回 PDF')
+            if (latexUrl && latexUrl.startsWith('blob:')) URL.revokeObjectURL(latexUrl)
+            latexUrl = result.url
+            latexLoading('正在打开 PDF…')
+            const frame = $('#latex-frame')
+            await new Promise((resolve, reject) => {
+              const timer = setTimeout(() => {
+                cleanup()
+                reject(new Error('PDF 打开超时'))
+              }, 20000)
+              const onLoad = () => {
+                cleanup()
+                resolve()
+              }
+              const onError = () => {
+                cleanup()
+                reject(new Error('PDF 无法在浏览器中打开'))
+              }
+              const cleanup = () => {
+                clearTimeout(timer)
+                frame.removeEventListener('load', onLoad)
+                frame.removeEventListener('error', onError)
+              }
+              frame.addEventListener('load', onLoad)
+              frame.addEventListener('error', onError)
+              frame.src = result.url
+            })
+            if (token !== latexToken) return
+            $('#latex-loading').hidden = true
+            setStatus('LaTeX 视图已就绪', 'ok', false)
+          } catch (e) {
+            if (token === latexToken) latexFailed(e)
+          }
+        }
+
+        $('#view-interactive').onclick = () => showView('interactive')
+        $('#view-latex').onclick = () => {
+          if (currentView === 'latex') return
+          showView('latex')
+          openLatexView()
         }
 
         $('#property-import-input').onchange = async (e) => {

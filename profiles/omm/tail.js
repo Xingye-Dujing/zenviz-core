@@ -87,3 +87,34 @@
           }
         }
         $('#save-review-btn').onclick = exportReview
+
+        /* OMM compiles through the existing ZENTEX local service. The studio
+           only speaks the compile contract; the service owns the engine and
+           the PDF it hands back. */
+        window.ZenVizTex = {
+          async compile(tex, chart, progress) {
+            const bases = ['', 'http://127.0.0.1:8123']
+            let last = null
+            for (const base of bases) {
+              try {
+                progress(base ? '正在连接本地编译服务…' : '正在调用编译器…')
+                const res = await fetch(base + '/api/compile', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tex, engine: 'xelatex', passes: 1, mainfile: 'main.tex' }),
+                })
+                if (!res.ok) throw new Error('HTTP ' + res.status)
+                const data = await res.json()
+                if (!data.ok || !data.key) throw new Error(data.error || '编译服务未返回 PDF')
+                progress('正在打开 PDF…')
+                return { url: base + '/pdf?key=' + encodeURIComponent(data.key) }
+              } catch (e) {
+                last = e
+              }
+            }
+            throw new Error(
+              '未检测到本地 LaTeX 编译服务（请启动 server/latex-serve.py）：' +
+                (last && last.message ? last.message : ''),
+            )
+          },
+        }

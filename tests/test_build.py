@@ -50,7 +50,13 @@ class BuildDeterminism(unittest.TestCase):
             self.assertNotIn('var(--zen-', css)
             self.assertIn('function applyRadius()', js)
             self.assertIn("['radiusrow', '圆角']", js)
-            for token in ('ZenUI', 'ZenUtil', 'data-zen-select', 'lib/data-viz'):
+            self.assertIn('function openLatexView()', js)
+            self.assertIn('window.ZenVizTex.compile', js)
+            self.assertIn('.view-btn[aria-pressed=', css)
+            self.assertIn('#latex-view[hidden]', css)
+            self.assertIn('id="view-latex"', html)
+            self.assertIn('id="latex-frame"', html)
+            for token in ('ZenUI', 'ZenUtil', 'data-zen-select', 'lib/data-viz', '127.0.0.1', '/api/visualize/'):
                 self.assertNotIn(token, js)
             for token in ('data-omm-app', 'zen/components/', 'zen/zen.css'):
                 self.assertNotIn(token, html)
@@ -66,6 +72,8 @@ class BuildDeterminism(unittest.TestCase):
             html = (pathlib.Path(root) / 'public/omm-visualization.html').read_text(encoding='utf-8')
             self.assertIn('<style>', html)
             self.assertIn('function applyRadius()', html)
+            self.assertIn('id="view-latex"', html)
+            self.assertIn('window.ZenVizTex', html)
             self.assertNotIn('zen/zen.css', html)
 
 
