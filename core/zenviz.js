@@ -7,6 +7,7 @@
           category: '论文',
           type: 'line',
           palette: 'science',
+          radius: 0,
           title: '研究结果',
           subtitle: '',
           titlePosition: 'top-left',
@@ -8140,6 +8141,7 @@
             ],
             style: [
               ['bgrow', '背景'],
+              ['radiusrow', '圆角'],
               ['sep'],
               ['toggle:grid', '显示网格'],
               ['toggle:legend', '显示图例'],
@@ -8166,6 +8168,8 @@
               if (it[0] === 'sep') return '<div class="dd-divider"></div>'
               if (it[0] === 'bgrow')
                 return `<div class="dd-item-row"><span>背景</span><div class="settings-bg-options">${bgDot('plain', '纯白')}${bgDot('body-grid', '网格')}${bgDot('body-dots', '圆点')}${bgDot('body-cross', '十字')}${bgDot('body-diagonal', '斜线')}</div></div>`
+              if (it[0] === 'radiusrow')
+                return `<div class="dd-item-row"><span>圆角</span><div class="settings-control"><span class="settings-value">${state.radius}px</span><button class="settings-btn" type="button" data-dd="radius:down">−</button><button class="settings-btn" type="button" data-dd="radius:up">+</button></div></div>`
               // 透明背景显示当前状态，方便和右侧属性栏对照
               if (it[0] === 'export-transparency')
                 return `<button class="dd-item${exportTransparent() ? ' selected' : ''}" type="button" data-dd="export-transparency"><span>透明背景</span><span class="muted">${exportTransparent() ? '开' : '关'}</span></button>`
@@ -8188,6 +8192,9 @@
               edit: 'D',
               import: 'I',
               shortcuts: '?',
+              'radius:down': '',
+              'radius:show': '',
+              'radius:up': '',
               'zoom:down': '',
               'zoom:show': '',
               'zoom:up': '',
@@ -8225,7 +8232,7 @@
             hkNote(
               '焦点停在任意输入框里时，<b>I</b> 与 <b>D</b> 不会触发，可以正常打字；带 <b>' +
                 esc(mod) +
-                '</b> 的导出键位不受影响。<br />导出 SVG、打印，以及“样式 → 背景”目前只能点击操作，暂无键位。',
+                '</b> 的导出键位不受影响。<br />导出 SVG、打印，以及“样式 → 背景 / 圆角”目前只能点击操作，暂无键位。',
             ),
           ]
           const grid = $('#shortcuts-body')
@@ -8381,6 +8388,11 @@
           if (id.startsWith('engine:')) {
             selectEngine(id.split(':')[1])
             refreshOpenDropdown('engine')
+            return
+          }
+          if (id.startsWith('radius:')) {
+            changeRadius(id.endsWith('up') ? 2 : -2)
+            refreshOpenDropdown('style')
             return
           }
           if (id.startsWith('toggle:')) {
@@ -12468,14 +12480,31 @@
         })
         window.addEventListener('resize', resizeHandler)
 
+        function applyRadius() {
+          document.documentElement.style.setProperty('--radius', state.radius + 'px')
+        }
+        function changeRadius(delta) {
+          state.radius = Math.min(12, Math.max(0, state.radius + delta))
+          applyRadius()
+          try {
+            localStorage.setItem('zenviz.radius', String(state.radius))
+          } catch (e) {
+            reportError('圆角设置保存失败', e, false)
+          }
+          renderInspector()
+          setStatus(`统一圆角 · ${state.radius}px`)
+        }
         function restoreStylePrefs() {
           try {
+            const r = Number(localStorage.getItem('zenviz.radius'))
+            if (Number.isFinite(r)) state.radius = Math.max(0, Math.min(12, r))
             const bg = localStorage.getItem('zenviz.bg')
             if (['', 'plain', 'body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg))
               state.bg = bg || 'plain'
           } catch (e) {
             reportError('样式设置读取失败', e, false)
           }
+          applyRadius()
           applyBg(state.bg)
         }
 
@@ -14298,8 +14327,10 @@
           state.engine = 'echarts'
           state.type = 'line'
           state.category = '论文'
+          state.radius = 0
           state.bg = 'body-grid'
           loadEnginePropertyStore(state.engine, state.type)
+          applyRadius()
           applyBg('body-grid')
           renderCategories('论文')
           renderTypeList(categories[state.category])
