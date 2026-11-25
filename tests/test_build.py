@@ -52,11 +52,12 @@ class BuildDeterminism(unittest.TestCase):
             self.assertIn("['radiusrow', '圆角']", js)
             self.assertIn('function openLatexView()', js)
             self.assertIn('window.ZenVizTex.compile', js)
+            self.assertIn('/api/visualize/latex-pdf', js)
             self.assertIn('.view-btn[aria-pressed=', css)
             self.assertIn('#latex-view[hidden]', css)
             self.assertIn('id="view-latex"', html)
             self.assertIn('id="latex-frame"', html)
-            for token in ('ZenUI', 'ZenUtil', 'data-zen-select', 'lib/data-viz', '127.0.0.1', '/api/visualize/'):
+            for token in ('ZenUI', 'ZenUtil', 'data-zen-select', 'lib/data-viz', '127.0.0.1'):
                 self.assertNotIn(token, js)
             for token in ('data-omm-app', 'zen/components/', 'zen/zen.css'):
                 self.assertNotIn(token, html)

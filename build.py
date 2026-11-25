@@ -124,7 +124,7 @@ def build(product: str, root: pathlib.Path) -> None:
         static = root / 'backend/static'
         write(static / 'css/zenviz.css', read(CORE / 'core/zenviz.css'))
         write(static / 'js/zenviz-parse.js', read(CORE / 'core/zenviz-parse.js'))
-        write(static / 'js/zenviz-page.js', read(CORE / 'core/zenviz.js'))
+        write(static / 'js/zenviz-page.js', inject_tail(page_js, tail))
         html = fill_shell(
             cfg,
             head,
